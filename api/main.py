@@ -178,13 +178,34 @@ def list_datasets():
 
 def safe_read_csv(path, nrows=None):
     """
-    Lee un CSV de forma robusta usando el motor de Pandas.
-    Detecta automáticamente el delimitador y limpia los nombres de las columnas.
+    Lee un CSV de forma robusta. Prioriza la coma como separador (motor C)
+    para manejar correctamente campos entre comillas que contienen comas.
+    Si falla o detecta solo una columna, intenta autodetección (motor Python).
     """
     import pandas as pd
     
+    # Intento 1: Coma como delimitador (motor C es el más robusto para quotes estándar)
     try:
-        # sep=None con engine='python' permite detectar automáticamente , ; o \t
+        df = pd.read_csv(
+            path, 
+            encoding='latin1', 
+            sep=',', 
+            engine='c', 
+            nrows=nrows,
+            on_bad_lines='warn',
+            quotechar='"',
+            doublequote=True
+        )
+        # Si detectamos múltiples columnas, es muy probable que sea coma
+        if len(df.columns) > 1:
+            df.columns = [str(c).strip() for c in df.columns]
+            df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+            return df
+    except Exception:
+        pass
+
+    # Intento 2: Autodetección como fallback (para archivos con ; o \t)
+    try:
         df = pd.read_csv(
             path, 
             encoding='latin1', 
@@ -193,14 +214,10 @@ def safe_read_csv(path, nrows=None):
             nrows=nrows,
             on_bad_lines='warn'
         )
-        
-        # Limpiar nombres de columnas (quitar espacios en blanco yUnnamed)
         df.columns = [str(c).strip() for c in df.columns]
         df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-        
         return df
     except Exception as e:
-        # Propagamos el error para capturarlo en el endpoint de upload
         raise ValueError(f"Falla técnica al leer CSV: {str(e)}")
 
 @app.get("/datasets/{dataset_id}/data", summary="Obtener datos de un dataset")
