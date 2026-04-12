@@ -53,8 +53,11 @@
         <!-- Main Chat Area -->
         <main class="chat-container">
             <div class="chat-header">
+                <button id="mobile-menu-toggle" class="mobile-only-btn" aria-label="Abrir Menú">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
                 <h1>🧠 Exploración de Datos</h1>
-                <span class="status-badge"><span class="pulse"></span> API Central Online</span>
+                <span class="status-badge"><span class="pulse"></span> API Online</span>
             </div>
 
             <div class="chat-messages" id="chat-messages">
@@ -112,6 +115,7 @@
                 </form>
             </div>
         </main>
+        <div id="sidebar-overlay" class="sidebar-overlay"></div>
     </div>
     <script src="app.js"></script>
 </body>

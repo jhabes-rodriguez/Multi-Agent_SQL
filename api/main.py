@@ -243,6 +243,38 @@ def safe_read_csv(path, nrows=None):
         except:
             raise e
 
+@app.post("/session/reset", summary="Reiniciar sesión y borrar todos los datos")
+def reset_session():
+    """
+    Limpia completamente la base de datos y borra los archivos físicos 
+    para garantizar una sesión nueva al refrescar.
+    """
+    import shutil
+    conn = get_db()
+    try:
+        # 1. Truncar tablas (en orden de dependencia)
+        conn.execute("DELETE FROM insights")
+        conn.execute("DELETE FROM queries")
+        conn.execute("DELETE FROM datasets")
+        conn.execute("DELETE FROM query_cache")
+        conn.commit()
+        
+        # 2. Limpiar archivos físicos
+        if os.path.exists(DATASETS_DIR):
+            for filename in os.listdir(DATASETS_DIR):
+                file_path = os.path.join(DATASETS_DIR, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    print(f"Error borrando archivo {file_path}: {e}")
+                    
+        return {"status": "success", "message": "Sesión reiniciada. Todo limpio."}
+    finally:
+        conn.close()
+
 @app.get("/datasets/{dataset_id}/data", summary="Obtener datos de un dataset")
 def get_dataset_data(dataset_id: int, limit: int = 500, offset: int = 0):
     conn = get_db()

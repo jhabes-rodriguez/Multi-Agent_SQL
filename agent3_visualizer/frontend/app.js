@@ -8,15 +8,44 @@ document.addEventListener("DOMContentLoaded", () => {
     
     const API_URL = '/api';
 
-    // Inicializar sesión cargando los datos guardados en la API
+    // Inicializar sesión: Resetear todo en el servidor para "chat nuevo"
     async function initSession() {
-        // Borrar solo el historial al refrescar la página, manteniendo las tablas
+        try {
+            // Llamada al endpoint de reset para limpiar DB y archivos
+            await fetch(`${API_URL}/session/reset`, { method: 'POST' });
+        } catch (e) {
+            console.error("Error al reiniciar sesión:", e);
+        }
+        
+        // Limpiar localstorage del cliente
         localStorage.removeItem('agent3_history');
         fetchDatasets();
         renderHistory();
     }
     
     initSession();
+
+    // Lógica de Menú Móvil
+    const menuToggle = document.getElementById('mobile-menu-toggle');
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+
+    if (menuToggle && sidebar && overlay) {
+        const toggleMenu = (show) => {
+            sidebar.classList.toggle('open', show);
+            overlay.classList.toggle('active', show);
+        };
+
+        menuToggle.addEventListener('click', () => toggleMenu(true));
+        overlay.addEventListener('click', () => toggleMenu(false));
+        
+        // Cerrar menú al seleccionar un dataset en móvil
+        sidebar.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 && e.target.closest('li')) {
+                toggleMenu(false);
+            }
+        });
+    }
 
     // Lógica para subir archivos manualmente
     if(uploadBtn && fileUpload) {
