@@ -176,151 +176,39 @@ def list_datasets():
         conn.close()
 
 
-def greedy_split(line, expected_cols, delimiter=','):
-    """
-    Divide una línea de CSV por el delimitador especificado de forma 'codiciosa', 
-    re-ensamblando campos que fueron divididos pero pertenecen a una misma cita.
-    """
-    # Si ya tiene las columnas esperadas con un split simple, no hacemos nada más
-    parts = line.split(delimiter)
-    if len(parts) == expected_cols:
-        return [p.strip().strip('"').strip() for p in parts]
-    
-    fixed = []
-    temp = ""
-    in_quote = False
-    
-    for p in parts:
-        clean_p = p.strip()
-        starts_quote = clean_p.startswith('"')
-        
-        if starts_quote and not in_quote:
-            in_quote = True
-            temp = p
-            if clean_p.count('"') % 2 == 0 and clean_p.count('"') > 0:
-                in_quote = False
-                fixed.append(temp.strip().strip('"').strip())
-                temp = ""
-        elif in_quote:
-            temp += delimiter + p
-            if clean_p.count('"') % 2 != 0:
-                in_quote = False
-                fixed.append(temp.strip().strip('"').strip())
-                temp = ""
-        else:
-            fixed.append(p.strip().strip('"').strip())
-            
-    # Forzar el número de columnas exacto
-    if len(fixed) > expected_cols:
-        last_val = delimiter.join(fixed[expected_cols-1:])
-        fixed = fixed[:expected_cols-1] + [last_val]
-    elif len(fixed) < expected_cols:
-        fixed += [""] * (expected_cols - len(fixed))
-        
-    return fixed
-
-
 def safe_read_csv(path, nrows=None):
     """
-    Lee un CSV de forma ultra-robusta con detección inteligente de delimitadores
-    y fallback codicioso para filas malformadas.
+    Lee un CSV de forma estándar y robusta usando Pandas.
+    Usa sep=None para detectar automáticamente comas, tabs o semicolons.
+    Mantiene encoding latin1 y maneja correctamente finales de línea.
     """
     import pandas as pd
-    import csv
+    import traceback
     
-    rows = []
     try:
+        # Abrimos con newline='' para compatibilidad Windows/Linux
         with open(path, 'r', encoding='latin1', newline='') as f:
-            # 1. Detectar delimitador de la CABECERA
-            header_line = f.readline().strip()
-            if not header_line:
-                return pd.DataFrame()
-            
-            # Buscamos el mejor separador entre , ; y tab
-            possible_seps = [',', ';', '\t']
-            header_sep = ','
-            header_cols = 0
-            for s in possible_seps:
-                count = len(header_line.split(s))
-                if count > header_cols:
-                    header_cols = count
-                    header_sep = s
-            
-            header_reader = csv.reader([header_line], delimiter=header_sep, quotechar='"', skipinitialspace=True)
-            header = next(header_reader)
-            rows.append(header)
-            header_len = len(header)
-            
-            # 2. Procesar Datos con Red de Seguridad
-            for i, line in enumerate(f):
-                if nrows is not None and i >= nrows:
-                    break
-                
-                line = line.strip()
-                if not line:
-                    continue
-                
-                # Intentamos usar el separador de la cabecera primero
-                try:
-                    line_reader = csv.reader([line], delimiter=header_sep, quotechar='"', skipinitialspace=True)
-                    row = next(line_reader)
-                except:
-                    row = [line]
-                
-                # Si el largo no coincide, intentamos re-detectar para esta fila (por si es mixto)
-                if len(row) != header_len:
-                    row_sep = ',' # Default fallback
-                    row_max = 0
-                    for s in possible_seps:
-                        c = len(line.split(s))
-                        if c > row_max:
-                            row_max = c
-                            row_sep = s
-                    
-                    # Usamos el Greedy Splitter con el mejor separador de la fila
-                    row = greedy_split(line, header_len, delimiter=row_sep)
-                
-                # Limpiar celdas individuales
-                row = [cell.strip() if isinstance(cell, str) else cell for cell in row]
-                rows.append(row)
+            df = pd.read_csv(
+                f, 
+                sep=None, 
+                engine='python', 
+                nrows=nrows, 
+                on_bad_lines='warn'
+            )
         
-        if len(rows) <= 1:
-            return pd.DataFrame(columns=rows[0] if rows else [])
-            
-        header = rows[0]
-        data = rows[1:]
-        
-        # Normalización manual: asegura que todas las filas tengan el mismo número de columnas que el encabezado
-        fixed_data = []
-        for r in data:
-            if len(r) > header_len:
-                fixed_data.append(r[:header_len])
-            elif len(r) < header_len:
-                fixed_data.append(r + [''] * (header_len - len(r)))
-            else:
-                fixed_data.append(r)
-        
-        df = pd.DataFrame(fixed_data, columns=header)
-        
-        # Limpieza final de columnas fantasma
+        # Limpiar nombres de columnas
         df.columns = [str(c).strip() for c in df.columns]
         df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
         
-        # Conversión inteligente a numérico
-        for col in df.columns:
-            try:
-                df[col] = pd.to_numeric(df[col], errors='ignore')
-            except:
-                pass
-                
         return df
 
     except Exception as e:
-        # Último recurso absoluto: Pandas nativo
+        print(f"Error crítico leyendo CSV: {traceback.format_exc()}")
+        # Fallback de emergencia a coma estándar
         try:
-            return pd.read_csv(path, encoding='latin1', sep=None, engine='python', nrows=nrows)
-        except Exception as final_e:
-            raise ValueError(f"Error crítico de parseo CSV: {str(e)} | Backup error: {str(final_e)}")
+            return pd.read_csv(path, encoding='latin1', sep=',', nrows=nrows)
+        except:
+            raise e
 
 @app.get("/datasets/{dataset_id}/data", summary="Obtener datos de un dataset")
 def get_dataset_data(dataset_id: int, limit: int = 500, offset: int = 0):
