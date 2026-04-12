@@ -185,19 +185,23 @@ def safe_read_csv(path, nrows=None):
     import pandas as pd
     import traceback
     
+    import io
     try:
         # Abrimos con newline='' para compatibilidad Windows/Linux
         with open(path, 'r', encoding='latin1', newline='') as f:
+            # Leemos el contenido y normalizamos tabuladores a comas 
+            # Esto arregla archivos que tienen cabecera con Tabs y datos con Comas
+            content = f.read().replace('\t', ',')
+            
             df = pd.read_csv(
-                f, 
+                io.StringIO(content), 
                 sep=',', 
                 quotechar='"', 
-                encoding='latin1',
                 on_bad_lines='warn',
-                engine='python' # El motor python es más flexible con las comillas
+                engine='python' # Motor más robusto para archivos "sucios"
             )
         
-        # Limpiar nombres de columnas
+        # Limpiar nombres de columnas y eliminar columnas vacías
         df.columns = [str(c).strip() for c in df.columns]
         df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
         
@@ -205,7 +209,7 @@ def safe_read_csv(path, nrows=None):
 
     except Exception as e:
         print(f"Error crítico leyendo CSV: {traceback.format_exc()}")
-        # Fallback de emergencia
+        # Fallback de emergencia total
         try:
             return pd.read_csv(path, encoding='latin1', sep=None, engine='python')
         except:
