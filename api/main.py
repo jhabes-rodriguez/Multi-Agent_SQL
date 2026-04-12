@@ -187,12 +187,11 @@ def safe_read_csv(path, nrows=None):
     
     import io
     try:
-        # Abrimos con newline='' y el encoding especificado por el usuario anteriormente
+        # Usamos la configuración exacta sugerida por el usuario: sep='\t'
         with open(path, 'r', encoding='latin1', newline='') as f:
             df = pd.read_csv(
                 f, 
-                quotechar='"', 
-                delimiter=',',
+                sep='\t',          # 🔥 "ESTA ES LA CLAVE"
                 encoding='latin1',
                 engine='python',
                 on_bad_lines='warn'
@@ -206,9 +205,9 @@ def safe_read_csv(path, nrows=None):
 
     except Exception as e:
         print(f"Error crítico leyendo CSV: {traceback.format_exc()}")
-        # Fallback ultra-básico tal cual propuso el usuario
+        # Fallback basado en la sugerencia del usuario
         try:
-            return pd.read_csv(path, quotechar='"', delimiter=',', encoding='latin1')
+            return pd.read_csv(path, sep='\t', encoding='latin1')
         except:
             raise e
 
