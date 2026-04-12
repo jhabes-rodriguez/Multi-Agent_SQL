@@ -190,10 +190,11 @@ def safe_read_csv(path, nrows=None):
         with open(path, 'r', encoding='latin1', newline='') as f:
             df = pd.read_csv(
                 f, 
-                sep=None, 
-                engine='python', 
-                nrows=nrows, 
-                on_bad_lines='warn'
+                sep=',', 
+                quotechar='"', 
+                encoding='latin1',
+                on_bad_lines='warn',
+                engine='python' # El motor python es más flexible con las comillas
             )
         
         # Limpiar nombres de columnas
@@ -204,9 +205,9 @@ def safe_read_csv(path, nrows=None):
 
     except Exception as e:
         print(f"Error crítico leyendo CSV: {traceback.format_exc()}")
-        # Fallback de emergencia a coma estándar
+        # Fallback de emergencia
         try:
-            return pd.read_csv(path, encoding='latin1', sep=',', nrows=nrows)
+            return pd.read_csv(path, encoding='latin1', sep=None, engine='python')
         except:
             raise e
 
