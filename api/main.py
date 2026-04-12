@@ -178,31 +178,62 @@ def list_datasets():
 
 def safe_read_csv(path, nrows=None):
     """
-    Lee un CSV de forma ultra-robusta usando el módulo csv nativo.
-    Maneja espacios antes de comillas, comas internas y asegura uniformidad de columnas.
+    Lee un CSV de forma ultra-robusta con cirugía Regex.
+    Si el parseador estándar falla al dividir columnas por comas internas en comillas,
+    aplica una expresión regular quirúrgica para forzar la separación.
     """
     import pandas as pd
     import csv
+    import re
+    
+    # Regex para separar por comas ignorando las que están dentro de comillas dobles
+    csv_regex = re.compile(r',(?=(?:(?:[^"]*"){2})*[^"]*$)')
     
     rows = []
     try:
         with open(path, 'r', encoding='latin1', newline='') as f:
-            # skipinitialspace=True es VITAL para casos como: ..., "Texto"
-            reader = csv.reader(f, delimiter=',', quotechar='"', skipinitialspace=True)
-            for i, row in enumerate(reader):
-                if nrows is not None and i > nrows:
+            # 1. Procesar el Encabezado
+            header_line = f.readline().strip()
+            if not header_line:
+                return pd.DataFrame()
+            
+            header_reader = csv.reader([header_line], delimiter=',', quotechar='"', skipinitialspace=True)
+            header = next(header_reader)
+            rows.append(header)
+            header_len = len(header)
+            
+            # 2. Procesar Datos con Fallback
+            for i, line in enumerate(f):
+                if nrows is not None and i >= nrows:
                     break
-                # Limpiar celdas individuales por si acaso
-                rows.append([cell.strip() if isinstance(cell, str) else cell for cell in row])
+                
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Intento A: Parseador estándar
+                try:
+                    line_reader = csv.reader([line], delimiter=',', quotechar='"', skipinitialspace=True)
+                    row = next(line_reader)
+                except:
+                    row = [line]
+                
+                # CIRUGÍA LÁSER: Si quedó fusionado en 1 columna pero hay comas, forzamos split por Regex
+                if len(row) <= 1 and header_len > 1 and ',' in line:
+                    # Separamos usando el regex que respeta comillas
+                    row = [p.strip().strip('"').strip() for p in csv_regex.split(line)]
+                
+                # Limpiar celdas individuales
+                row = [cell.strip() if isinstance(cell, str) else cell for cell in row]
+                rows.append(row)
         
-        if not rows:
-            return pd.DataFrame()
+        if len(rows) <= 1:
+            return pd.DataFrame(columns=rows[0] if rows else [])
             
         header = rows[0]
         data = rows[1:]
         
         # Normalización manual: asegura que todas las filas tengan el mismo número de columnas que el encabezado
-        header_len = len(header)
         fixed_data = []
         for r in data:
             if len(r) > header_len:
@@ -214,14 +245,13 @@ def safe_read_csv(path, nrows=None):
         
         df = pd.DataFrame(fixed_data, columns=header)
         
-        # Limpieza de nombres de columnas y eliminación de columnas fantasma
+        # Limpieza final de columnas fantasma
         df.columns = [str(c).strip() for c in df.columns]
         df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
         
         # Conversión inteligente a numérico
         for col in df.columns:
             try:
-                # Intentamos convertir, si falla se queda como string
                 df[col] = pd.to_numeric(df[col], errors='ignore')
             except:
                 pass
@@ -229,7 +259,7 @@ def safe_read_csv(path, nrows=None):
         return df
 
     except Exception as e:
-        # Último recurso: Pandas con motor python
+        # Último recurso absoluto: Pandas nativo
         try:
             return pd.read_csv(path, encoding='latin1', sep=None, engine='python', nrows=nrows)
         except Exception as final_e:
