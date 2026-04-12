@@ -93,11 +93,19 @@ async def upload_dataset(
     safe_name = name.replace(" ", "_").lower()
     file_path = os.path.join(DATASETS_DIR, f"{safe_name}.csv")
 
+    # Asegurar que el puntero esté al inicio
+    await file.seek(0)
+    
     # Guardar archivo
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # Contar filas y columnas
+    # Verificar que se guardó algo
+    file_size = os.path.getsize(file_path)
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="Error: El archivo guardado en el servidor tiene 0 bytes.")
+
+    # Contar filas y columnas con el nuevo motor robusto
     try:
         df = safe_read_csv(file_path)
         rows_count    = len(df)
@@ -105,10 +113,13 @@ async def upload_dataset(
         columns_names = list(df.columns)
     except Exception as e:
         import traceback
-        print("Error uploading", traceback.format_exc())
-        rows_count    = 0
-        columns_count = 0
-        columns_names = []
+        error_msg = traceback.format_exc()
+        print(f"Error parseando CSV: {error_msg}")
+        # En Render, queremos ver el error en la respuesta para diagnosticar
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Error al procesar el CSV '{name}'. Detalles:\n{error_msg}"
+        )
 
     conn = get_db()
     try:
@@ -166,56 +177,31 @@ def list_datasets():
 
 
 def safe_read_csv(path, nrows=None):
+    """
+    Lee un CSV de forma robusta usando el motor de Pandas.
+    Detecta automáticamente el delimitador y limpia los nombres de las columnas.
+    """
     import pandas as pd
-    import csv
     
-    # newline='' es crítico para el módulo csv al mover archivos entre Windows y Linux
-    with open(path, 'r', encoding='latin1', newline='') as f:
-        reader = csv.reader(f, delimiter=',')
-        rows = list(reader)
+    try:
+        # sep=None con engine='python' permite detectar automáticamente , ; o \t
+        df = pd.read_csv(
+            path, 
+            encoding='latin1', 
+            sep=None, 
+            engine='python', 
+            nrows=nrows,
+            on_bad_lines='warn'
+        )
         
-    if not rows:
-        return pd.DataFrame()
+        # Limpiar nombres de columnas (quitar espacios en blanco yUnnamed)
+        df.columns = [str(c).strip() for c in df.columns]
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
         
-    fixed_rows = []
-    header_len = len(rows[0])
-    
-    for r in rows:
-        # Si la fila fue forzadamente unificada en 1 columna por comillas gigantes, pero debería tener más
-        if len(r) == 1 and header_len > 1 and ',' in r[0]:
-            try:
-                sub_reader = csv.reader([r[0]], delimiter=',')
-                sub_r = list(sub_reader)[0]
-                fixed_rows.append(sub_r)
-            except Exception:
-                fixed_rows.append(r)
-        else:
-            fixed_rows.append(r)
-            
-    if nrows is not None:
-        fixed_rows = fixed_rows[:nrows+1]
-    
-    # Normalizar filas al largo del header (truncar o rellenar)
-    if fixed_rows:
-        header_len = len(fixed_rows[0])
-        normalized = [fixed_rows[0]]  # header
-        for row in fixed_rows[1:]:
-            if len(row) > header_len:
-                normalized.append(row[:header_len])   # truncar columnas extra
-            elif len(row) < header_len:
-                normalized.append(row + [''] * (header_len - len(row)))  # rellenar
-            else:
-                normalized.append(row)
-        fixed_rows = normalized
-        
-    # Convertir a pandas
-    df = pd.DataFrame(fixed_rows[1:], columns=fixed_rows[0]) if fixed_rows else pd.DataFrame()
-    
-    # Autocasteo para evitar que todo sea object (string)
-    for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors='ignore')
-        
-    return df
+        return df
+    except Exception as e:
+        # Propagamos el error para capturarlo en el endpoint de upload
+        raise ValueError(f"Falla técnica al leer CSV: {str(e)}")
 
 @app.get("/datasets/{dataset_id}/data", summary="Obtener datos de un dataset")
 def get_dataset_data(dataset_id: int, limit: int = 500, offset: int = 0):
