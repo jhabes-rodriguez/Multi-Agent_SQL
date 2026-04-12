@@ -1,8 +1,10 @@
 import sqlite3
 import os
 
-DATABASE_PATH = os.getenv("DATABASE_PATH", "./data/multiagent.db")
-DATASETS_DIR  = os.getenv("DATASETS_DIR",  "./data/datasets")
+# Rutas absolutas para asegurar persistencia y acceso correcto en Render
+BASE_DIR      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(BASE_DIR, "data", "multiagent.db"))
+DATASETS_DIR  = os.getenv("DATASETS_DIR",  os.path.join(BASE_DIR, "data", "datasets"))
 
 
 def get_db() -> sqlite3.Connection:

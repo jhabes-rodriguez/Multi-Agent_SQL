@@ -169,7 +169,8 @@ def safe_read_csv(path, nrows=None):
     import pandas as pd
     import csv
     
-    with open(path, 'r', encoding='latin1') as f:
+    # newline='' es crítico para el módulo csv al mover archivos entre Windows y Linux
+    with open(path, 'r', encoding='latin1', newline='') as f:
         reader = csv.reader(f, delimiter=',')
         rows = list(reader)
         
