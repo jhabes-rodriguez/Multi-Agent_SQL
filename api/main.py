@@ -178,47 +178,62 @@ def list_datasets():
 
 def safe_read_csv(path, nrows=None):
     """
-    Lee un CSV de forma robusta. Prioriza la coma como separador (motor C)
-    para manejar correctamente campos entre comillas que contienen comas.
-    Si falla o detecta solo una columna, intenta autodetección (motor Python).
+    Lee un CSV de forma ultra-robusta usando el módulo csv nativo.
+    Maneja espacios antes de comillas, comas internas y asegura uniformidad de columnas.
     """
     import pandas as pd
+    import csv
     
-    # Intento 1: Coma como delimitador (motor C es el más robusto para quotes estándar)
+    rows = []
     try:
-        df = pd.read_csv(
-            path, 
-            encoding='latin1', 
-            sep=',', 
-            engine='c', 
-            nrows=nrows,
-            on_bad_lines='warn',
-            quotechar='"',
-            doublequote=True
-        )
-        # Si detectamos múltiples columnas, es muy probable que sea coma
-        if len(df.columns) > 1:
-            df.columns = [str(c).strip() for c in df.columns]
-            df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-            return df
-    except Exception:
-        pass
-
-    # Intento 2: Autodetección como fallback (para archivos con ; o \t)
-    try:
-        df = pd.read_csv(
-            path, 
-            encoding='latin1', 
-            sep=None, 
-            engine='python', 
-            nrows=nrows,
-            on_bad_lines='warn'
-        )
+        with open(path, 'r', encoding='latin1', newline='') as f:
+            # skipinitialspace=True es VITAL para casos como: ..., "Texto"
+            reader = csv.reader(f, delimiter=',', quotechar='"', skipinitialspace=True)
+            for i, row in enumerate(reader):
+                if nrows is not None and i > nrows:
+                    break
+                # Limpiar celdas individuales por si acaso
+                rows.append([cell.strip() if isinstance(cell, str) else cell for cell in row])
+        
+        if not rows:
+            return pd.DataFrame()
+            
+        header = rows[0]
+        data = rows[1:]
+        
+        # Normalización manual: asegura que todas las filas tengan el mismo número de columnas que el encabezado
+        header_len = len(header)
+        fixed_data = []
+        for r in data:
+            if len(r) > header_len:
+                fixed_data.append(r[:header_len])
+            elif len(r) < header_len:
+                fixed_data.append(r + [''] * (header_len - len(r)))
+            else:
+                fixed_data.append(r)
+        
+        df = pd.DataFrame(fixed_data, columns=header)
+        
+        # Limpieza de nombres de columnas y eliminación de columnas fantasma
         df.columns = [str(c).strip() for c in df.columns]
         df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+        
+        # Conversión inteligente a numérico
+        for col in df.columns:
+            try:
+                # Intentamos convertir, si falla se queda como string
+                df[col] = pd.to_numeric(df[col], errors='ignore')
+            except:
+                pass
+                
         return df
+
     except Exception as e:
-        raise ValueError(f"Falla técnica al leer CSV: {str(e)}")
+        # Último recurso: Pandas con motor python
+        try:
+            return pd.read_csv(path, encoding='latin1', sep=None, engine='python', nrows=nrows)
+        except Exception as final_e:
+            raise ValueError(f"Error crítico de parseo CSV: {str(e)} | Backup error: {str(final_e)}")
 
 @app.get("/datasets/{dataset_id}/data", summary="Obtener datos de un dataset")
 def get_dataset_data(dataset_id: int, limit: int = 500, offset: int = 0):
