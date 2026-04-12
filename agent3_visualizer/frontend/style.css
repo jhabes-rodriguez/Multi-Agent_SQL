@@ -25,7 +25,12 @@ body {
     overflow: hidden;
 }
 
-.app-container { display: flex; height: 100vh; width: 100vw; }
+.app-container { 
+    display: flex; 
+    height: 100vh; 
+    height: 100dvh; 
+    width: 100vw; 
+}
 
 /* ═══════════════════════════════════════════
    SIDEBAR
@@ -557,7 +562,12 @@ body {
     }
 
     .chat-header {
-        padding: 0 1rem;
+        padding: 0 0.75rem;
+        height: 50px;
+    }
+
+    .chat-header h1 {
+        font-size: 0.9rem;
     }
 
     .mobile-only-btn {
@@ -565,23 +575,63 @@ body {
     }
 
     .chat-messages {
-        padding: 1rem;
+        padding: 0.75rem;
+        gap: 0.75rem;
     }
 
     .message {
-        max-width: 95%;
+        max-width: 98%;
     }
 
+    /* Compactar bienvenida en móvil */
+    .welcome-card {
+        padding: 1rem !important;
+    }
+    .welcome-hero h2 {
+        font-size: 1.1rem;
+    }
+    .welcome-subtitle {
+        font-size: 0.8rem;
+    }
     .capabilities-grid {
         grid-template-columns: 1fr;
+        gap: 0.4rem;
+    }
+    .capability-card {
+        padding: 0.6rem;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .cap-icon {
+        font-size: 1.1rem;
+    }
+    .welcome-examples {
+        font-size: 0.75rem;
+        padding-top: 0.75rem;
     }
 
     .chat-input-area {
-        padding: 1rem;
+        padding: 0.5rem;
+        padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    }
+
+    .input-form {
+        padding: 0.25rem;
+        padding-left: 0.75rem;
+    }
+
+    .input-form input {
+        font-size: 0.85rem;
+    }
+
+    .input-form button {
+        width: 38px;
+        height: 38px;
     }
 
     .status-badge {
-        display: none; /* Ahorrar espacio en móvil */
+        display: none; 
     }
 
     .sidebar-overlay {

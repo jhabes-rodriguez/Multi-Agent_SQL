@@ -315,4 +315,11 @@ document.addEventListener("DOMContentLoaded", () => {
     function scrollToBottom() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
+
+    // Mejora móvil: scroll al enfocar input
+    userInput.addEventListener('focus', () => {
+        if (window.innerWidth <= 768) {
+            setTimeout(scrollToBottom, 300);
+        }
+    });
 });
