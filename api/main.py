@@ -176,6 +176,54 @@ def list_datasets():
         conn.close()
 
 
+def greedy_split(line, expected_cols):
+    """
+    Divide una línea de CSV por comas de forma 'codiciosa', 
+    re-ensamblando campos que fueron divididos pero pertenecen a una misma cita.
+    Especialmente útil para archivos malformados con "" o comas rebeldes.
+    """
+    # Primero intentamos un split simple
+    parts = line.split(',')
+    if len(parts) == expected_cols:
+        return [p.strip().strip('"').strip() for p in parts]
+    
+    fixed = []
+    temp = ""
+    in_quote = False
+    
+    for p in parts:
+        clean_p = p.strip()
+        # Detectar inicio de cita (soporta " o "")
+        starts_quote = clean_p.startswith('"')
+        
+        if starts_quote and not in_quote:
+            in_quote = True
+            temp = p
+            # Si tiene un número par de comillas (ej: ""Texto""), se cierra en sí mismo
+            if clean_p.count('"') % 2 == 0 and clean_p.count('"') > 0:
+                in_quote = False
+                fixed.append(temp.strip().strip('"').strip())
+                temp = ""
+        elif in_quote:
+            temp += "," + p
+            # Una comilla impar al final suele indicar el cierre del bloque
+            if clean_p.count('"') % 2 != 0:
+                in_quote = False
+                fixed.append(temp.strip().strip('"').strip())
+                temp = ""
+        else:
+            fixed.append(p.strip().strip('"').strip())
+            
+    # Forzar el número de columnas exacto unificando el excedente en la última columna
+    if len(fixed) > expected_cols:
+        last_val = ",".join(fixed[expected_cols-1:])
+        fixed = fixed[:expected_cols-1] + [last_val]
+    elif len(fixed) < expected_cols:
+        fixed += [""] * (expected_cols - len(fixed))
+        
+    return fixed
+
+
 def safe_read_csv(path, nrows=None):
     """
     Lee un CSV de forma ultra-robusta con cirugía Regex.
@@ -218,10 +266,9 @@ def safe_read_csv(path, nrows=None):
                 except:
                     row = [line]
                 
-                # CIRUGÍA LÁSER: Si quedó fusionado en 1 columna pero hay comas, forzamos split por Regex
-                if len(row) <= 1 and header_len > 1 and ',' in line:
-                    # Separamos usando el regex que respeta comillas
-                    row = [p.strip().strip('"').strip() for p in csv_regex.split(line)]
+                # REPARACIÓN CODICIOSA: Si falló, tiene comas y el largo no coincide, usamos el Greedy Splitter
+                if len(row) != header_len and ',' in line:
+                    row = greedy_split(line, header_len)
                 
                 # Limpiar celdas individuales
                 row = [cell.strip() if isinstance(cell, str) else cell for cell in row]
