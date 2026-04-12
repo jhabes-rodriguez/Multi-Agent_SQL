@@ -16,15 +16,6 @@ Un poderoso sistema de inteligencia artificial compuesto por **2 agentes especia
 
 El sistema está orquestado mediante módulos independientes que se desacoplan, asegurando estabilidad y escalabilidad:
 
-```mermaid
-graph TD
-    USER((Usuario)) -->|Sube Datasets CSV por Interfaz Web| A3
-    A3[Agent 3: Visualizer] <-->|Consulta Históricos y Genera UI Web| API
-    API(API Central - localhost:8000) --- SQLite[(Local SQLite DB)]
-    A2[Agent 2: SQL Learner] <-->|Lee y Guarda Queries y NLP| API
-    USER -->|Interactúa y Visualiza en Chat Web| A3
-    USER -->|Comandos CLI (Opcional)| A2
-```
 
 *   **API Central** (FastAPI): Centro de persistencia de todo el proyecto. Trabaja de forma asíncrona contra una base de datos local (SQLite). Alimenta a todos los agentes.
 *   **Agent 2 SQL Learner (agent2_sql_learner)**: Interfaz de comandos interactivo y cerebro backend que domina Groq LLM (LLAMA-3) para inferir queries SQL exactas ante las preguntas del usuario.
