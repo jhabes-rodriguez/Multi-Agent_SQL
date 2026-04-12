@@ -186,12 +186,24 @@ def safe_read_csv(path, nrows=None):
     import traceback
     
     import io
+    import io
     try:
-        # Usamos la configuración exacta sugerida por el usuario: sep='\t'
+        # 1. Leer el archivo y normalizar SOLO la cabecera si tiene tabs pero los datos tienen comas
         with open(path, 'r', encoding='latin1', newline='') as f:
+            first_line = f.readline()
+            rest_of_file = f.read()
+            
+            # Si el título tiene tabs (\t) pero no comas, lo pasamos a comas para que coincida con los datos
+            if '\t' in first_line and ',' not in first_line:
+                first_line = first_line.replace('\t', ',')
+            
+            # Combinamos de nuevo para cargarlo en Pandas
+            clean_content = first_line + rest_of_file
+            
             df = pd.read_csv(
-                f, 
-                sep='\t',          # 🔥 "ESTA ES LA CLAVE"
+                io.StringIO(clean_content), 
+                sep=',', 
+                quotechar='"', 
                 encoding='latin1',
                 engine='python',
                 on_bad_lines='warn'
@@ -205,9 +217,9 @@ def safe_read_csv(path, nrows=None):
 
     except Exception as e:
         print(f"Error crítico leyendo CSV: {traceback.format_exc()}")
-        # Fallback basado en la sugerencia del usuario
         try:
-            return pd.read_csv(path, sep='\t', encoding='latin1')
+            # Fallback a detección automática si todo lo anterior falla
+            return pd.read_csv(path, sep=None, engine='python', encoding='latin1')
         except:
             raise e
 
