@@ -176,14 +176,13 @@ def list_datasets():
         conn.close()
 
 
-def greedy_split(line, expected_cols):
+def greedy_split(line, expected_cols, delimiter=','):
     """
-    Divide una línea de CSV por comas de forma 'codiciosa', 
+    Divide una línea de CSV por el delimitador especificado de forma 'codiciosa', 
     re-ensamblando campos que fueron divididos pero pertenecen a una misma cita.
-    Especialmente útil para archivos malformados con "" o comas rebeldes.
     """
-    # Primero intentamos un split simple
-    parts = line.split(',')
+    # Si ya tiene las columnas esperadas con un split simple, no hacemos nada más
+    parts = line.split(delimiter)
     if len(parts) == expected_cols:
         return [p.strip().strip('"').strip() for p in parts]
     
@@ -193,20 +192,17 @@ def greedy_split(line, expected_cols):
     
     for p in parts:
         clean_p = p.strip()
-        # Detectar inicio de cita (soporta " o "")
         starts_quote = clean_p.startswith('"')
         
         if starts_quote and not in_quote:
             in_quote = True
             temp = p
-            # Si tiene un número par de comillas (ej: ""Texto""), se cierra en sí mismo
             if clean_p.count('"') % 2 == 0 and clean_p.count('"') > 0:
                 in_quote = False
                 fixed.append(temp.strip().strip('"').strip())
                 temp = ""
         elif in_quote:
-            temp += "," + p
-            # Una comilla impar al final suele indicar el cierre del bloque
+            temp += delimiter + p
             if clean_p.count('"') % 2 != 0:
                 in_quote = False
                 fixed.append(temp.strip().strip('"').strip())
@@ -214,9 +210,9 @@ def greedy_split(line, expected_cols):
         else:
             fixed.append(p.strip().strip('"').strip())
             
-    # Forzar el número de columnas exacto unificando el excedente en la última columna
+    # Forzar el número de columnas exacto
     if len(fixed) > expected_cols:
-        last_val = ",".join(fixed[expected_cols-1:])
+        last_val = delimiter.join(fixed[expected_cols-1:])
         fixed = fixed[:expected_cols-1] + [last_val]
     elif len(fixed) < expected_cols:
         fixed += [""] * (expected_cols - len(fixed))
@@ -226,31 +222,36 @@ def greedy_split(line, expected_cols):
 
 def safe_read_csv(path, nrows=None):
     """
-    Lee un CSV de forma ultra-robusta con cirugía Regex.
-    Si el parseador estándar falla al dividir columnas por comas internas en comillas,
-    aplica una expresión regular quirúrgica para forzar la separación.
+    Lee un CSV de forma ultra-robusta con detección inteligente de delimitadores
+    y fallback codicioso para filas malformadas.
     """
     import pandas as pd
     import csv
-    import re
-    
-    # Regex para separar por comas ignorando las que están dentro de comillas dobles
-    csv_regex = re.compile(r',(?=(?:(?:[^"]*"){2})*[^"]*$)')
     
     rows = []
     try:
         with open(path, 'r', encoding='latin1', newline='') as f:
-            # 1. Procesar el Encabezado
+            # 1. Detectar delimitador de la CABECERA
             header_line = f.readline().strip()
             if not header_line:
                 return pd.DataFrame()
             
-            header_reader = csv.reader([header_line], delimiter=',', quotechar='"', skipinitialspace=True)
+            # Buscamos el mejor separador entre , ; y tab
+            possible_seps = [',', ';', '\t']
+            header_sep = ','
+            header_cols = 0
+            for s in possible_seps:
+                count = len(header_line.split(s))
+                if count > header_cols:
+                    header_cols = count
+                    header_sep = s
+            
+            header_reader = csv.reader([header_line], delimiter=header_sep, quotechar='"', skipinitialspace=True)
             header = next(header_reader)
             rows.append(header)
             header_len = len(header)
             
-            # 2. Procesar Datos con Fallback
+            # 2. Procesar Datos con Red de Seguridad
             for i, line in enumerate(f):
                 if nrows is not None and i >= nrows:
                     break
@@ -259,16 +260,25 @@ def safe_read_csv(path, nrows=None):
                 if not line:
                     continue
                 
-                # Intento A: Parseador estándar
+                # Intentamos usar el separador de la cabecera primero
                 try:
-                    line_reader = csv.reader([line], delimiter=',', quotechar='"', skipinitialspace=True)
+                    line_reader = csv.reader([line], delimiter=header_sep, quotechar='"', skipinitialspace=True)
                     row = next(line_reader)
                 except:
                     row = [line]
                 
-                # REPARACIÓN CODICIOSA: Si falló, tiene comas y el largo no coincide, usamos el Greedy Splitter
-                if len(row) != header_len and ',' in line:
-                    row = greedy_split(line, header_len)
+                # Si el largo no coincide, intentamos re-detectar para esta fila (por si es mixto)
+                if len(row) != header_len:
+                    row_sep = ',' # Default fallback
+                    row_max = 0
+                    for s in possible_seps:
+                        c = len(line.split(s))
+                        if c > row_max:
+                            row_max = c
+                            row_sep = s
+                    
+                    # Usamos el Greedy Splitter con el mejor separador de la fila
+                    row = greedy_split(line, header_len, delimiter=row_sep)
                 
                 # Limpiar celdas individuales
                 row = [cell.strip() if isinstance(cell, str) else cell for cell in row]
