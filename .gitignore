@@ -1,0 +1,26 @@
+# Environment files with secrets
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Databases
+*.db
+
+# Data directory (generated at runtime)
+data/
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Temp files
+mock_uploads/
+kaggle_tmp_*/
+*.tmp

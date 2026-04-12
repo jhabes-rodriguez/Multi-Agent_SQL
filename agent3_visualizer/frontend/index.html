@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Agent SQL Workspace</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=2">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-icon">⚡</div>
+                <h2>Multi-Agent SQL</h2>
+                <p>AI Data Workspace</p>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/><polyline points="14 2 14 8 20 8"/></svg>
+                    TABLAS Y VISTAS CREADAS
+                </h3>
+                <ul id="datasets-list" class="item-list">
+                    <li class="empty-state">
+                        <span class="empty-icon">📂</span>
+                        <span class="text-muted small">Sube un CSV para empezar</span>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="sidebar-section flex-grow">
+                <h3>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+                    HISTORIAL
+                </h3>
+                <ul id="history-list" class="item-list history-list">
+                    <p class="text-muted small">No hay historial</p>
+                </ul>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-footer-badge">
+                    <span class="pulse"></span>
+                    <span>Sistema activo</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-container">
+            <div class="chat-header">
+                <h1>🧠 Exploración de Datos</h1>
+                <span class="status-badge"><span class="pulse"></span> API Central Online</span>
+            </div>
+
+            <div class="chat-messages" id="chat-messages">
+                <!-- Welcome message -->
+                <div class="message system-message slide-in">
+                    <div class="message-content welcome-card">
+                        <div class="welcome-hero">
+                            <h2>👋 ¡Hola! Soy tu Analista de Datos AI</h2>
+                            <p class="welcome-subtitle">Sube tus archivos <strong>.CSV</strong> con el botón <span class="inline-badge">📎</span> y yo me encargo del resto. Puedes subir <strong>varios a la vez</strong>.</p>
+                        </div>
+                        
+                        <div class="capabilities-grid">
+                            <div class="capability-card">
+                                <span class="cap-icon">🔍</span>
+                                <span class="cap-title">Consultas SQL</span>
+                                <span class="cap-desc">Pregunta en español y yo genero el SQL</span>
+                            </div>
+                            <div class="capability-card">
+                                <span class="cap-icon">📊</span>
+                                <span class="cap-title">Gráficas</span>
+                                <span class="cap-desc">Barras, líneas, pie, scatter automáticos</span>
+                            </div>
+                            <div class="capability-card">
+                                <span class="cap-icon">🔗</span>
+                                <span class="cap-title">Cruzar tablas</span>
+                                <span class="cap-desc">JOINs entre múltiples bases de datos</span>
+                            </div>
+                            <div class="capability-card">
+                                <span class="cap-icon">💡</span>
+                                <span class="cap-title">Insights</span>
+                                <span class="cap-desc">Análisis inteligente con IA de tus datos</span>
+                            </div>
+                        </div>
+
+                        <p class="welcome-examples">
+                            <strong>Prueba algo como:</strong> 
+                            <code>"Muéstrame las primeras 10 filas"</code> · 
+                            <code>"Grafica la distribución por departamento"</code> · 
+                            <code>"Compara los datos del 2022 vs 2023"</code>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <form id="chat-form" class="input-form">
+                    <button type="button" id="upload-btn" aria-label="Subir Base de Datos" title="Subir archivos CSV (puedes seleccionar varios)" style="margin-right: -4px;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                    </button>
+                    <input type="file" id="file-upload" accept=".csv" multiple style="display: none;">
+                    <input type="text" id="user-input" placeholder="Escribe tu consulta, petición gráfica o adjunta un CSV..." autocomplete="off">
+                    <button type="submit" id="send-btn" aria-label="Enviar">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </form>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
