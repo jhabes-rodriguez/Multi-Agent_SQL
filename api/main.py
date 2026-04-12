@@ -178,48 +178,68 @@ def list_datasets():
 
 def safe_read_csv(path, nrows=None):
     """
-    Lee un CSV de forma estándar y robusta usando Pandas.
-    Usa sep=None para detectar automáticamente comas, tabs o semicolons.
-    Mantiene encoding latin1 y maneja correctamente finales de línea.
+    Mapeador de Precisión Manual:
+    Lee la cabecera usando tabuladores y los datos usando comas + comillas,
+    asegurando una alineación perfecta de las 6 columnas.
     """
     import pandas as pd
+    import csv
     import traceback
     
-    import io
-    import io
+    rows = []
     try:
-        # 1. Leer el archivo y normalizar SOLO la cabecera si tiene tabs pero los datos tienen comas
         with open(path, 'r', encoding='latin1', newline='') as f:
-            first_line = f.readline()
-            rest_of_file = f.read()
+            # 1. Procesar Cabecera (Forzar separación por Tabs)
+            header_line = f.readline().strip()
+            if not header_line:
+                return pd.DataFrame()
             
-            # Si el título tiene tabs (\t) pero no comas, lo pasamos a comas para que coincida con los datos
-            if '\t' in first_line and ',' not in first_line:
-                first_line = first_line.replace('\t', ',')
+            # Intentamos separar por Tabuladores primero
+            headers = [h.strip() for h in header_line.split('\t') if h.strip()]
+            # Si se ve como 1 columna, intentamos por comas
+            if len(headers) <= 1:
+                headers = [h.strip() for h in header_line.split(',') if h.strip()]
             
-            # Combinamos de nuevo para cargarlo en Pandas
-            clean_content = first_line + rest_of_file
+            num_cols = len(headers)
             
-            df = pd.read_csv(
-                io.StringIO(clean_content), 
-                sep=',', 
-                quotechar='"', 
-                encoding='latin1',
-                engine='python',
-                on_bad_lines='warn'
-            )
+            # 2. Procesar Datos (Forzar comas y manejar comillas)
+            # csv.reader es el estándar para no romper frases con comas internas
+            reader = csv.reader(f, delimiter=',', quotechar='"', skipinitialspace=True)
+            
+            for i, row in enumerate(reader):
+                if nrows is not None and i >= nrows:
+                    break
+                if not row:
+                    continue
+                
+                # Limpiar cada celda de ruidos (como los tabs que sobran al final)
+                clean_row = []
+                for cell in row:
+                    # Quitamos tabuladores fantasma y espacios
+                    c = str(cell).split('\t')[0].strip()
+                    clean_row.append(c)
+                
+                # ALINEACIÓN FORZADA: Cortamos o rellenamos para que coincida con los títulos
+                if len(clean_row) > num_cols:
+                    clean_row = clean_row[:num_cols]
+                elif len(clean_row) < num_cols:
+                    clean_row += [""] * (num_cols - len(clean_row))
+                
+                rows.append(clean_row)
         
-        # Limpiar nombres de columnas
+        # Crear el DataFrame final
+        df = pd.DataFrame(rows, columns=headers)
+        
+        # Limpieza final de nombres de columnas
         df.columns = [str(c).strip() for c in df.columns]
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
         
         return df
 
     except Exception as e:
-        print(f"Error crítico leyendo CSV: {traceback.format_exc()}")
+        print(f"Error crítico en Mapeador de Precisión: {traceback.format_exc()}")
+        # Último recurso: Pandas nativo
         try:
-            # Fallback a detección automática si todo lo anterior falla
-            return pd.read_csv(path, sep=None, engine='python', encoding='latin1')
+            return pd.read_csv(path, encoding='latin1', sep=None, engine='python', nrows=nrows)
         except:
             raise e
 
