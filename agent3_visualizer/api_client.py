@@ -40,7 +40,8 @@ async def run_query(query: str, intent: dict) -> Any:
     Interpreta qué dataset usar según la intención extraída o usa el más reciente por defecto.
     """
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        # Aumentamos el timeout a 60 segundos para permitir la descarga de datasets grandes (ej: 64k filas)
+        async with httpx.AsyncClient(timeout=60) as client:
             # 1. Obtener datasets disponibles
             ds_resp = await client.get(f"{settings.api_base_url}/datasets/list")
             ds_resp.raise_for_status()
@@ -57,17 +58,26 @@ async def run_query(query: str, intent: dict) -> Any:
                 table_name = f"ds_{safe_name}"
                 
                 # Obtener TODOS los datos del dataset (sin truncar a 500)
+                # NOTA: Esto puede ser lento para archivos de > 50k filas en Render
                 data_resp = await client.get(
                     f"{settings.api_base_url}/datasets/{ds_id}/data",
                     params={"limit": 10000000},
                 )
+                
                 if data_resp.status_code == 200:
                     raw_data = data_resp.json().get("data", [])
                     if raw_data:
                         datasets_data_list.append((table_name, raw_data))
+                else:
+                    # Loggeamos el error pero permitimos que otros datasets se carguen si existen
+                    print(f"Error {data_resp.status_code} al descargar dataset {ds_id}: {data_resp.text[:200]}")
 
             if not datasets_data_list:
-                return {"error": "Los datasets disponibles están vacíos o no se pudieron descargar."}
+                return {
+                    "error": "No se pudieron descargar los datos. "
+                             "Esto suele ser un límite de tiempo (Timeout) en Render con archivos grandes. "
+                             "Por favor intenta con un archivo más pequeño o espera a una conexión más estable."
+                }
 
             # 3. Cargar TODO en SQLite y generar esquema global
             from query_engine import load_all_to_sqlite, nl_to_sql, execute_sql
