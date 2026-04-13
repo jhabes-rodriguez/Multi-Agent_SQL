@@ -1,5 +1,7 @@
 # Sistema Multi-Agente para Ingestión y Análisis de Datos 🤖📊
 
+**🌐 Aplicación Desplegada:** [https://multi-agent-sql.onrender.com/](https://multi-agent-sql.onrender.com/)
+
 Un poderoso sistema de inteligencia artificial compuesto por **2 agentes especializados** que interactúan entre sí a través de una **API Central (REST)**. Permite cargar bases de datos, entenderlas, convertirlas a consultas SQL desde lenguaje natural y finalmente graficarlas interactivamente.
 
 ## ✨ Características Principales
