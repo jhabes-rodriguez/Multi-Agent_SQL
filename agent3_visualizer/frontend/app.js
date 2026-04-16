@@ -10,17 +10,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Inicializar sesión: Resetear todo en el servidor para "chat nuevo"
     async function initSession() {
+        // Limpieza inmediata de la UI para feedback visual instantáneo
+        datasetsList.innerHTML = '<li class="loading">Iniciando sesión limpia...</li>';
+        chatMessages.innerHTML = '';
+        
         try {
-            // Llamada al endpoint de reset para limpiar DB y archivos
-            await fetch(`${API_URL}/session/reset`, { method: 'POST' });
+            // Llamada al endpoint de reset con cache-busting
+            await fetch(`${API_URL}/session/reset?t=${Date.now()}`, { method: 'POST' });
         } catch (e) {
             console.error("Error al reiniciar sesión:", e);
         }
         
         // Limpiar localstorage del cliente
         localStorage.removeItem('agent3_history');
-        fetchDatasets();
+        
+        // Forzar recarga de datasets frescos
+        await fetchDatasets();
         renderHistory();
+        appendMessage("¡Bienvenido! He limpiado la sesión anterior. Puedes subir tus archivos CSV para empezar.", "system");
     }
     
     initSession();
@@ -144,12 +151,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function fetchDatasets() {
         try {
-            const response = await fetch(`${API_URL}/datasets`);
+            // Cache-busting para evitar resultados viejos en el refresco
+            const response = await fetch(`${API_URL}/datasets?t=${Date.now()}`);
             if (!response.ok) return;
             const datasets = await response.json();
             
+            datasetsList.innerHTML = '';
             if (datasets && datasets.length > 0) {
-                datasetsList.innerHTML = '';
                 datasets.forEach(ds => {
                     const li = document.createElement('li');
                     const displayName = (ds.name || `Dataset ${ds.id}`);

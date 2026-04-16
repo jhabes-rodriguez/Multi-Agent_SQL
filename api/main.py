@@ -178,70 +178,69 @@ def list_datasets():
 
 def safe_read_csv(path, nrows=None):
     """
-    Mapeador de Precisión Manual:
-    Lee la cabecera usando tabuladores y los datos usando comas + comillas,
-    asegurando una alineación perfecta de las 6 columnas.
+    Motor de Ingesta Robusto (v2):
+    - Maneja títulos con comas no escapadas usando Alineación Inversa (Backwards Alignment).
+    - Normaliza ruidos en números (puntos y comas de miles).
+    - Detecta automáticamente el número de columnas reales desde el header.
     """
     import pandas as pd
     import csv
     import traceback
+    import re
     
     rows = []
     try:
         with open(path, 'r', encoding='latin1', newline='') as f:
-            # 1. Procesar Cabecera (Forzar separación por Tabs)
             header_line = f.readline().strip()
             if not header_line:
                 return pd.DataFrame()
             
-            # Intentamos separar por Tabuladores primero
-            headers = [h.strip() for h in header_line.split('\t') if h.strip()]
-            # Si se ve como 1 columna, intentamos por comas
-            if len(headers) <= 1:
-                headers = [h.strip() for h in header_line.split(',') if h.strip()]
-            
+            # 1. Detectar headers y número de columnas esperado
+            headers = [h.strip() for h in header_line.split(',') if h.strip()]
             num_cols = len(headers)
             
-            # 2. Procesar Datos (Forzar comas y manejar comillas)
-            # csv.reader es el estándar para no romper frases con comas internas
+            # 2. Leer datos usando un reader flexible
             reader = csv.reader(f, delimiter=',', quotechar='"', skipinitialspace=True)
             
+            def clean_numeric(val):
+                """Convierte '689.500.000' -> 689500000 para que SQLite pueda operar."""
+                if not val or not isinstance(val, str): return val
+                if re.match(r'^-?[\d.,]+$', val.strip()):
+                    c = val.replace(".", "").replace(",", "").strip()
+                    if c.isdigit(): return int(c)
+                return val.strip()
+
             for i, row in enumerate(reader):
                 if nrows is not None and i >= nrows:
                     break
-                if not row:
-                    continue
+                if not row: continue
                 
-                # Limpiar cada celda de ruidos (como los tabs que sobran al final)
-                clean_row = []
-                for cell in row:
-                    # Quitamos tabuladores fantasma y espacios
-                    c = str(cell).split('\t')[0].strip()
-                    clean_row.append(c)
+                curr_row = [c.strip() for c in row]
+                # Quitar celdas vacías al final que sobren del conteo esperado
+                while len(curr_row) > num_cols and not curr_row[-1]:
+                    curr_row.pop()
+
+                # ALINEACIÓN INVERSA (Backwards Alignment)
+                if len(curr_row) > num_cols:
+                    # Las últimas (num_cols - 1) son las "fijas" (Available, Date, Hours, Runtime, Views)
+                    fixed_part = curr_row[-(num_cols-1):]
+                    # Todo lo anterior es el Título reconstruido
+                    title_parts = curr_row[:-(num_cols-1)]
+                    aligned_row = [", ".join(title_parts)] + fixed_part
+                elif len(curr_row) < num_cols:
+                    aligned_row = curr_row + [""] * (num_cols - len(curr_row))
+                else:
+                    aligned_row = curr_row
                 
-                # ALINEACIÓN FORZADA: Cortamos o rellenamos para que coincida con los títulos
-                if len(clean_row) > num_cols:
-                    clean_row = clean_row[:num_cols]
-                elif len(clean_row) < num_cols:
-                    clean_row += [""] * (num_cols - len(clean_row))
-                
-                rows.append(clean_row)
+                # Normalización Numérica
+                final_row = [clean_numeric(cell) for cell in aligned_row]
+                rows.append(final_row)
         
-        # Crear el DataFrame final
-        df = pd.DataFrame(rows, columns=headers)
-        
-        # Limpieza final de nombres de columnas
-        df.columns = [str(c).strip() for c in df.columns]
-        
-        return df
+        return pd.DataFrame(rows, columns=headers)
 
     except Exception as e:
-        print(f"Error crítico en Mapeador de Precisión: {traceback.format_exc()}")
-        # Último recurso: Pandas nativo
-        try:
-            return pd.read_csv(path, encoding='latin1', sep=None, engine='python', nrows=nrows)
-        except:
-            raise e
+        print(f"Error crítico en Ingesta Robusta: {traceback.format_exc()}")
+        raise e
 
 @app.post("/session/reset", summary="Reiniciar sesión y borrar todos los datos")
 def reset_session():

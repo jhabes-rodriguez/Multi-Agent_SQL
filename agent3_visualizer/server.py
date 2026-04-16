@@ -109,6 +109,15 @@ async def proxy_upload(
 async def get_datasets():
     return await fetch_datasets()
 
+@app.post("/api/session/reset")
+async def session_reset():
+    """Proxy para reiniciar la sesión en la API central."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(f"{settings.api_base_url}/session/reset")
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        return resp.json()
+
 # Crear frontend dir temporalmente si no existe para que fastapi mount no falle
 os.makedirs("frontend", exist_ok=True)
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

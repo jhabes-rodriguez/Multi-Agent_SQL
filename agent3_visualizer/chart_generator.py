@@ -8,13 +8,45 @@ try:
 except Exception:
     client = None
 
+def parse_time_to_numeric(val: Any) -> Any:
+    """Convierte strings de tiempo (H:MM, M:SS) a minutos (float) para graficar."""
+    if not isinstance(val, str) or ":" not in val:
+        return val
+    try:
+        parts = val.split(":")
+        if len(parts) == 2:  # MM:SS o H:MM
+            return int(parts[0]) + (int(parts[1]) / 60.0)
+        elif len(parts) == 3:  # H:MM:SS
+            return (int(parts[0]) * 60) + int(parts[1]) + (int(parts[2]) / 60.0)
+    except Exception:
+        return val
+    return val
+
+def get_semantic_hint(col: str) -> str:
+    """Identifica el propósito de la columna para guiar al grafico."""
+    name = col.lower()
+    if any(k in name for k in ["view", "hit", "popul", "visto"]):
+        return "Métrica de popularidad (RECOMENDADA para ránkings de 'más vistos')"
+    if any(k in name for k in ["runtime", "durat", "time", "len"]):
+        return "Duración/Tiempo (SOLO si piden duración, NO para popularidad)"
+    if any(k in name for k in ["date", "year", "lanz"]):
+        return "Fecha o serie temporal"
+    return ""
+
 async def generate_chart_config(data: List[Dict[str, Any]], intent: dict, user_query: str) -> dict:
     if not data or not isinstance(data, list) or len(data) == 0:
         return {}
     
     first_row = data[0]
-    columns_info = {k: type(v).__name__ for k, v in first_row.items()}
-    columns_list = list(columns_info.keys())
+    columns_list = list(first_row.keys())
+    
+    # Construir metadatos de columnas con pistas semánticas
+    cols_metadata = []
+    for col in columns_list:
+        hint = get_semantic_hint(col)
+        cols_metadata.append(f"- {col} (Tipo: {type(first_row[col]).__name__}) {'| PISTA: ' + hint if hint else ''}")
+    
+    cols_str = "\n".join(cols_metadata)
     
     chart_type = "bar"
     x_col = columns_list[0]
@@ -24,18 +56,18 @@ async def generate_chart_config(data: List[Dict[str, Any]], intent: dict, user_q
     if client:
         prompt = f"""
         Actúa como un experto en Plotly JS y analítica de datos.
-        El usuario ha proporcionado la siguiente consulta para graficar: "{user_query}"
+        El usuario ha proporcionado la siguiente consulta: "{user_query}"
         
-        Aquí está la estructura y primera fila de los datos devueltos por la base de datos SQL:
-        {json.dumps(first_row)}
+        COLUMNAS DISPONIBLES EN LOS DATOS:
+        {cols_str}
         
-        Dado el contexto, decide estrictamente cuál es la MEJOR gráfica para este caso de uso y cuáles son las columnas 'x' e 'y' EXACTAMENTE COMO ESTÁN NOMBRADAS.
-        Reglas:
-        - Si los datos retornados YA ESTÁN agregados (ej. muestran una cuenta/COUNT o promedios por categoría), NO RECOMIENDES "histogram". Usa "bar" o "pie".
-        - Usa "line" si x es una fecha/año o hay algo cronológico.
-        - Usa "bar" para comparaciones de categorías vs totales/counts.
-        - Devuelve estríctamente un JSON con este esquema exacto:
-        {{"chart_type": "bar|line|scatter|pie", "x_col": "nombre_columna_x", "y_col": "nombre_columna_y", "title": "Titulo Bonito y Legible de la Grafica"}}
+        REGLAS DE SELECCIÓN:
+        1. Si el usuario pide "más vistos", "Top películas", etc., la columna 'y' DEBE ser una de popularidad (ej. Views, Hits).
+        2. NO uses 'Runtime' (duración) para ránkings de popularidad a menos que se pida explícitamente duración.
+        3. Identifica la mejor columna para el eje X (usualmente nombres de series/películas/categorías).
+        
+        Devuelve estrictamente un JSON con este esquema:
+        {{"chart_type": "bar|line|scatter|pie", "x_col": "nombre_columna_x", "y_col": "nombre_columna_y", "title": "Titulo descriptivo"}}
         """
         try:
             chat_completion = await client.chat.completions.create(
@@ -57,7 +89,16 @@ async def generate_chart_config(data: List[Dict[str, Any]], intent: dict, user_q
     if y_col not in first_row: y_col = columns_list[-1] if len(columns_list) > 1 else columns_list[0]
 
     x_data = [row.get(x_col) for row in data]
-    y_data = [row.get(y_col) for row in data]
+    raw_y_data = [row.get(y_col) for row in data]
+    
+    # Intentar convertir datos de Y a números si son tiempos
+    y_data = [parse_time_to_numeric(v) for v in raw_y_data]
+    
+    # Detectar si se hizo conversión para ajustar el label
+    y_label = y_col
+    if any(isinstance(v, str) and ":" in v for v in raw_y_data[:5]):
+         if any(isinstance(v, (int, float)) for v in y_data[:5]):
+             y_label = f"{y_col} (convertido a minutos)"
     
     trace = {}
     
@@ -81,7 +122,7 @@ async def generate_chart_config(data: List[Dict[str, Any]], intent: dict, user_q
             "plot_bgcolor": "#16213e",
             "font": {"color": "#94a3b8", "family": "Inter, sans-serif"},
             "xaxis": {"title": x_col, "gridcolor": "#1e293b", "zerolinecolor": "#1e293b"},
-            "yaxis": {"title": y_col, "gridcolor": "#1e293b", "zerolinecolor": "#1e293b"},
+            "yaxis": {"title": y_label, "gridcolor": "#1e293b", "zerolinecolor": "#1e293b"},
             "margin": {"l": 50, "r": 30, "t": 60, "b": 50},
             "showlegend": True if chart_type == "pie" else False
         }
